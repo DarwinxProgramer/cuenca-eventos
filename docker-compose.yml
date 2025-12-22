@@ -1,0 +1,11 @@
+# Docker Compose for Cuenca Eventos - Local Development
+# Para producción, usar Vercel
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
