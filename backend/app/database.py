@@ -16,9 +16,9 @@ async def connect_to_mongodb():
     """Conectar a MongoDB al iniciar la aplicación"""
     global db_client
     
-    print(f"🔗 Conectando a MongoDB: {settings.MONGODB_URL}")
+    print(f"🔗 Conectando a MongoDB: {settings.MONGODB_URI}")
     
-    db_client = AsyncIOMotorClient(settings.MONGODB_URL)
+    db_client = AsyncIOMotorClient(settings.MONGODB_URI)
     
     # Importar modelos aquí para evitar imports circulares
     from app.models.user import User

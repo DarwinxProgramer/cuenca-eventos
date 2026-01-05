@@ -71,8 +71,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     
     encoded_jwt = jwt.encode(
         to_encode, 
-        settings.JWT_SECRET_KEY, 
-        algorithm=settings.JWT_ALGORITHM
+        settings.SECRET_KEY, 
+        algorithm=settings.ALGORITHM
     )
     return encoded_jwt
 
@@ -97,8 +97,8 @@ def create_refresh_token(data: dict) -> str:
     
     encoded_jwt = jwt.encode(
         to_encode, 
-        settings.JWT_SECRET_KEY, 
-        algorithm=settings.JWT_ALGORITHM
+        settings.SECRET_KEY, 
+        algorithm=settings.ALGORITHM
     )
     return encoded_jwt
 
@@ -117,8 +117,8 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
     try:
         payload = jwt.decode(
             token, 
-            settings.JWT_SECRET_KEY, 
-            algorithms=[settings.JWT_ALGORITHM]
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM]
         )
         
         # Verificar tipo de token
@@ -144,8 +144,8 @@ def decode_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(
             token, 
-            settings.JWT_SECRET_KEY, 
-            algorithms=[settings.JWT_ALGORITHM],
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM],
             options={"verify_exp": False}
         )
         return payload
