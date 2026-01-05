@@ -1,9 +1,9 @@
 import { ReactNode } from 'react';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import MainMenuHeader from './MainMenuHeader';
 
 // Import background image
-import fondoMenu from '../../icons/eventos/fondo_menu.png';
+import fondoMenu from '../../icons/fondo_menu.png';
 
 interface MenuPageLayoutProps {
     children: ReactNode;

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // Import logos
 import LogoPrincipal from '../../icons/LogoPrincipal.PNG';

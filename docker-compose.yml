@@ -1,11 +1,73 @@
-# Docker Compose for Cuenca Eventos - Local Development
-# Para producción, usar Vercel
+# ==============================================
+# Cuenca Eventos - Docker Compose
+# ==============================================
+# Para desarrollo local con todos los servicios
+
+version: '3.8'
 
 services:
+  # ==========================================
+  # Frontend - React + Vite (nginx en prod)
+  # ==========================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://localhost:3001/api/v1
     restart: unless-stopped
+
+  # ==========================================
+  # Backend - FastAPI + Python
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongodb
+      - redis
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=cuenca_eventos
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-desarrollo-secret-key-cambiar}
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - DEBUG=true
+      - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+    volumes:
+      - ./backend/app:/app/app # Hot reload en desarrollo
+    restart: unless-stopped
+
+  # ==========================================
+  # MongoDB - Base de datos
+  # ==========================================
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  # ==========================================
+  # Redis - Caché
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+# Volúmenes persistentes
+volumes:
+  mongodb_data:
+
+

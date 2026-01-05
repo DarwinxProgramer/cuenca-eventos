@@ -1,54 +1,20 @@
-import { useTheme } from '../../context/ThemeContext';
+import { useState, useEffect } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
+import { eventsApi, alertsApi, getImageUrl } from '../../services/eventsApi';
 
-// Import event images
-import FestivalLuces from '../../icons/eventos/Festival de luces.jpg';
-import CorpusChristi from '../../icons/eventos/corpus christi.jpg';
-import ExpoArte from '../../icons/eventos/expo arte.jpeg';
-import ViaCerrada from '../../icons/eventos/via cerrada.jpg';
+// Placeholder image as base64 gradient
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiNmOTczMTY7c3RvcC1vcGFjaXR5OjEiIC8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdHlsZT0ic3RvcC1jb2xvcjojZWE1ODBlO3N0b3Atb3BhY2l0eToxIiAvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtc2l6ZT0iNDAiPvCfjok8L3RleHQ+PC9zdmc+';
 
-// News data with real images
-const newsItems = [
-    {
-        id: 1,
-        title: 'Festival de Luces 2025',
-        description: 'El Centro Histórico de Cuenca se ilumina con más de 50 instalaciones lumínicas artísticas. Disfruta de un recorrido mágico por las calles empedradas mientras admiras proyecciones y esculturas de luz que transforman la ciudad en un escenario de ensueño.',
-        date: '25 Dic 2025',
-        time: '18:00 - 23:00',
-        location: 'Centro Histórico',
-        type: 'evento',
-        image: FestivalLuces,
-    },
-    {
-        id: 2,
-        title: 'Corpus Christi - Fiesta del Septenario',
-        description: 'Una de las celebraciones más importantes de Cuenca. Siete días de festividades religiosas y culturales con procesiones, fuegos artificiales, y los tradicionales dulces típicos en el Parque Calderón. Una experiencia única de fe y tradición.',
-        date: '19 Jun 2025',
-        time: 'Todo el día',
-        location: 'Catedral de la Inmaculada',
-        type: 'destacado',
-        image: CorpusChristi,
-    },
-    {
-        id: 3,
-        title: 'Expo Arte Contemporáneo',
-        description: 'El Museo de Arte Moderno presenta una exposición sin precedentes con obras de artistas locales e internacionales. Pinturas, esculturas e instalaciones que desafían los límites del arte tradicional. Entrada gratuita para estudiantes.',
-        date: '15 Ene 2025',
-        time: '09:00 - 17:00',
-        location: 'Museo de Arte Moderno',
-        type: 'evento',
-        image: ExpoArte,
-    },
-    {
-        id: 4,
-        title: 'Via Cerrada por ',
-        description: 'El desfile navideño más grande y colorido del Ecuador. Miles de participantes recorren las calles de Cuenca con carros alegóricos, niños disfrazados y ofrendas al Niño Jesús. Una tradición declarada Patrimonio Cultural del Ecuador.',
-        date: '24 Dic 2025',
-        time: '10:00 - 18:00',
-        location: 'Presidente cordova y tarqui',
-        type: 'destacado',
-        image: ViaCerrada,
-    },
-];
+type NewsItem = {
+    id: string;
+    title: string;
+    description: string;
+    date: string;
+    time: string;
+    location: string;
+    type: 'evento' | 'aviso';
+    image: string;
+};
 
 const getTypeStyles = (type: string, isDark: boolean) => {
     switch (type) {
@@ -60,10 +26,6 @@ const getTypeStyles = (type: string, isDark: boolean) => {
             return isDark
                 ? 'bg-accent-500/20 text-accent-400 border-accent-500/30'
                 : 'bg-accent-100 text-accent-600 border-accent-200';
-        case 'destacado':
-            return isDark
-                ? 'bg-secondary-500/20 text-secondary-400 border-secondary-500/30'
-                : 'bg-secondary-100 text-secondary-600 border-secondary-200';
         default:
             return isDark
                 ? 'bg-surface-700 text-surface-300 border-surface-600'
@@ -74,14 +36,103 @@ const getTypeStyles = (type: string, isDark: boolean) => {
 const getTypeLabel = (type: string) => {
     switch (type) {
         case 'evento': return 'Evento';
-        case 'aviso': return 'Aviso';
-        case 'destacado': return '⭐ Destacado';
+        case 'aviso': return '⚠️ Aviso';
         default: return 'Noticia';
     }
 };
 
 export default function NewsSection() {
     const { isDark } = useTheme();
+    const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadNewsItems();
+    }, []);
+
+    const loadNewsItems = async () => {
+        setLoading(true);
+        try {
+            // Get current month's start and end dates
+            const now = new Date();
+            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+            // Load events and alerts in parallel
+            const [allEvents, allAlerts] = await Promise.all([
+                eventsApi.list(),
+                alertsApi.list()
+            ]);
+
+            // Filter events for current month
+            const monthEvents = allEvents.filter(event => {
+                const eventDate = new Date(event.date);
+                return eventDate >= firstDayOfMonth && eventDate <= lastDayOfMonth;
+            });
+
+            // Filter active alerts
+            const activeAlerts = allAlerts.filter(alert => alert.is_active);
+
+            // Convert to NewsItem format
+            const eventItems: NewsItem[] = monthEvents.slice(0, 3).map(event => ({
+                id: event._id,
+                title: event.title,
+                description: event.description,
+                date: new Date(event.date).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' }),
+                time: event.time || 'Por confirmar',
+                location: event.location,
+                type: 'evento' as const,
+                image: getImageUrl(event.image_url || event.image_id) || PLACEHOLDER_IMAGE
+            }));
+
+            const alertItems: NewsItem[] = activeAlerts.slice(0, 1).map(alert => ({
+                id: alert._id,
+                title: alert.title,
+                description: alert.description,
+                date: new Date(alert.start_date).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' }),
+                time: `Hasta ${new Date(alert.end_date).toLocaleDateString('es-EC', { day: 'numeric', month: 'short' })}`,
+                location: alert.location,
+                type: 'aviso' as const,
+                image: PLACEHOLDER_IMAGE // Alerts don't have images
+            }));
+
+            // Combine and set news items (max 4 items)
+            setNewsItems([...alertItems, ...eventItems].slice(0, 4));
+        } catch (err) {
+            console.error('Error loading news:', err);
+            // Keep empty array if error
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <section className="py-8 pb-16">
+                <div className="container mx-auto px-4">
+                    <div className="flex items-center justify-center py-16">
+                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-500 border-t-transparent"></div>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    if (newsItems.length === 0) {
+        return (
+            <section className="py-8 pb-16">
+                <div className="container mx-auto px-4">
+                    <h2 className="text-2xl sm:text-3xl font-bold font-display text-white mb-8">
+                        Noticias y Avisos
+                    </h2>
+                    <div className={`text-center py-12 rounded-2xl ${isDark ? 'bg-surface-800/90 text-surface-400' : 'bg-white/90 text-surface-500'}`}>
+                        <span className="text-5xl mb-4 block">📭</span>
+                        <p>No hay noticias disponibles este mes</p>
+                    </div>
+                </div>
+            </section>
+        );
+    }
 
     return (
         <section className="py-8 pb-16">
@@ -101,7 +152,7 @@ export default function NewsSection() {
                             : 'bg-white/20 text-white border border-white/30'
                         }
                     `}>
-                        {newsItems.length} eventos próximos
+                        {newsItems.length} {newsItems.length === 1 ? 'elemento' : 'elementos'}
                     </span>
                 </div>
 
@@ -126,6 +177,9 @@ export default function NewsSection() {
                                     src={news.image}
                                     alt={news.title}
                                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE;
+                                    }}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 

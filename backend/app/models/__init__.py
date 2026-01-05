@@ -1,0 +1,1 @@
+# Modelos Beanie para MongoDB

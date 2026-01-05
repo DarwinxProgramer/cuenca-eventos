@@ -1,11 +1,10 @@
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
-// Import custom icons
+// Import icons
 import rutasIcon from '../../icons/rutas.png';
 import agendaIcon from '../../icons/agenda.png';
 import mapaIcon from '../../icons/mapa.png';
 import destacadosIcon from '../../icons/destacados.png';
-
 const features = [
     {
         id: 1,

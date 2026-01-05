@@ -1,0 +1,39 @@
+TÍTULO
+CUENCA VIVA: CONECTANDO TRADICIÓN Y TECNOLOGÍA EN TIEMPO REAL
+
+BREVE INTRODUCCIÓN
+Cuenca, pese a ser Patrimonio Cultural de la Humanidad, carece de una plataforma centralizada que permita a turistas y ciudadanos acceder eficientemente a su rica agenda cultural. La información se encuentra dispersa en redes sociales y medios físicos, dificultando la planificación. Este proyecto presenta una solución tecnológica integral (Web + PWA) que digitaliza la experiencia cultural, permitiendo el descubrimiento, geolocalización y seguimiento de eventos en tiempo real, cerrando la brecha entre la tradición y el usuario digital moderno.
+
+OBJETIVOS
+
+General:
+Desarrollar una Aplicación Web Progresiva (PWA) integral para la gestión, promoción y visualización interactiva de eventos culturales y rutas turísticas en la ciudad de Cuenca.
+
+Específicos:
+1. Implementar un sistema de geolocalización interactivo mediante OpenStreetMap que permita a los usuarios visualizar eventos y trazar rutas turísticas en tiempo real.
+2. Construir un panel de administración robusto y seguro que facilite a los gestores culturales la creación, edición y difusión de eventos y alertas viales.
+3. Garantizar la accesibilidad y disponibilidad de la información mediante la implementación de tecnología PWA, asegurando el funcionamiento offline y la instalación en dispositivos móviles.
+
+METODOLOGÍA
+Se aplicó un enfoque mixto combinando la metodología de desarrollo ágil para el software con principios de Diseño Centrado en el Usuario (DCU) para la interfaz:
+1. Investigación: Análisis de necesidades de turistas y gestores culturales.
+2. Diseño: Prototipado de interfaces modernas (Glassmorphism) enfocadas en la usabilidad móvil.
+3. Desarrollo Full-Stack: Arquitectura de microservicios utilizando FastAPl (Backend) para el alto rendimiento y React + Vite (Frontend) para una experiencia de usuario fluida.
+4. Despliegue e Iteración: Implementación de contenedores Docker y validación continua de funcionalidades PWA.
+
+RESULTADOS OBTENIDOS Y DISCUSIÓN
+Se obtuvo una plataforma completamente funcional "Cuenca Eventos" capaz de operar como aplicación nativa gracias a su arquitectura PWA.
+- Rendimiento: Tiempos de carga inferiores a 2 segundos y navegación fluida entre secciones.
+- Visualización: La integración de la galería dinámica y el mapa interactivo mejoró la comprensión espacial de la agenda cultural en comparación con las listas de texto tradicionales.
+- Accesibilidad: La capacidad offline permite consultar eventos guardados sin depender de una conexión constante, una ventaja crítica para turistas sin roaming.
+Discusión: A diferencia de las redes sociales, donde el contenido es efímero y desordenado, esta plataforma ofrece una estructura curada y georreferenciada, aumentando la probabilidad de asistencia a los eventos.
+
+CONCLUSIONES Y PROPUESTAS
+
+Conclusiones:
+La digitalización de la agenda cultural mediante tecnologías web modernas no solo facilita el acceso a la información, sino que moderniza la imagen turística de la ciudad. La arquitectura PWA demostró ser la solución más costo-efectiva para alcanzar a usuarios de iOS, Android y escritorio con un único código base.
+
+Propuestas:
+1. Integración de Inteligencia Artificial para recomendar eventos basados en el historial y preferencias del usuario.
+2. Implementación de Gamificación (puntos y medallas) para incentivar la visita física a rutas patrimoniales.
+3. Colaboración abierta con entidades públicas para automatizar la ingesta de datos de eventos oficiales.
