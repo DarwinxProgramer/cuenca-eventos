@@ -1,28 +1,28 @@
 # Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+fastapi==0.115.0
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
 
 # Base de datos
-pymongo==4.6.1
-motor==3.3.2
-beanie==1.25.0
+pymongo==4.10.1
+motor==3.6.0
+beanie==1.27.0
 
-# Autenticación - versiones con binarios precompilados
+# Autenticación - versiones con binarios para Python 3.13
 python-jose==3.3.0
-cryptography==41.0.7
+cryptography==44.0.0
 passlib==1.7.4
-bcrypt==4.1.2
+bcrypt==4.2.1
 
 # Caché
-redis==5.0.1
+redis==5.2.1
 
 # Validación
-pydantic==2.5.3
-pydantic-settings==2.1.0
-email-validator==2.1.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+email-validator==2.2.0
 
 # Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
-httpx==0.26.0
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
