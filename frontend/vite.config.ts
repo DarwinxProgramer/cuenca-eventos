@@ -58,7 +58,9 @@ export default defineConfig({
             },
             workbox: {
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp,woff,woff2}'],
+                navigateFallback: '/index.html', // Essential for SPA offline
                 runtimeCaching: [
+                    // Google Fonts
                     {
                         urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
                         handler: 'CacheFirst',
@@ -84,6 +86,33 @@ export default defineConfig({
                             },
                             cacheableResponse: {
                                 statuses: [0, 200]
+                            }
+                        }
+                    },
+                    // API Images (uploaded)
+                    {
+                        urlPattern: /\/api\/v1\/images\/.*/i,
+                        handler: 'StaleWhileRevalidate',
+                        options: {
+                            cacheName: 'api-images-cache',
+                            expiration: {
+                                maxEntries: 50,
+                                maxAgeSeconds: 60 * 60 * 24 * 7 // 1 week
+                            },
+                            cacheableResponse: {
+                                statuses: [0, 200]
+                            }
+                        }
+                    },
+                    // External Images (if any)
+                    {
+                        urlPattern: ({ request }) => request.destination === 'image',
+                        handler: 'StaleWhileRevalidate',
+                        options: {
+                            cacheName: 'images-cache',
+                            expiration: {
+                                maxEntries: 50,
+                                maxAgeSeconds: 60 * 60 * 24 * 7 // 1 week
                             }
                         }
                     }

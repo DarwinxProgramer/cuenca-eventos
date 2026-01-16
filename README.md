@@ -8,6 +8,7 @@
 ![PWA](https://img.shields.io/badge/PWA-Ready-purple?logo=pwa)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Latest-47A248?logo=mongodb)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Ready-326CE5?logo=kubernetes)
 
 ---
 
@@ -20,8 +21,8 @@ Cuenca Eventos es una **aplicación web progresiva (PWA)** full-stack que permit
 **Para Usuarios:**
 - 📅 **Calendario de Eventos** - Visualiza eventos por fecha con filtros
 - 🗺️ **Mapa Interactivo** - Explora eventos con geolocalización en OpenStreetMap
-- � **Experiencia PWA Completa** - Instalable en iOS/Android, soporte offline y experiencia nativa
-- �🛤️ **Rutas Turísticas** - Descubre rutas temáticas de la ciudad
+- 📲 **Experiencia PWA Completa** - Instalable en iOS/Android, soporte offline y experiencia nativa
+- 🛤️ **Rutas Turísticas** - Descubre rutas temáticas de la ciudad
 - 📋 **Agenda Personal** - Guarda y organiza tus eventos favoritos
 - 🔔 **Alertas de Tránsito** - Información sobre cierres viales y desvíos
 
@@ -43,7 +44,42 @@ Puedes instalar Cuenca Eventos como una aplicación nativa en tu dispositivo:
 
 ---
 
-## 🚀 Inicio Rápido
+## 🐳 Despliegue y Producción
+
+Este proyecto está preparado para desplegarse en entornos modernos escalables.
+
+### Arquitectura de Producción
+- **Frontend**: Vercel (Static Web App + PWA)
+- **Backend**: Render / Kubernetes (Containerized API)
+- **Database**: MongoDB Atlas (Cloud Database)
+
+### 1. Migración de Base de Datos
+Para mover tus datos locales a producción (MongoDB Atlas):
+
+1. Configura tu Connection String de Atlas en una variable de entorno `MONGODB_ATLAS_URI` o ingrésala cuando el script lo solicite.
+2. Ejecuta el script seguro de migración:
+   ```powershell
+   python scripts/migrate_db_safe.py
+   ```
+3. Selecciona el modo: `Limpiar` (sobrescribe todo) o `Agregar` (mantiene existentes).
+
+### 2. Despliegue en Kubernetes (K8s)
+
+Los manifiestos de producción se encuentran en la carpeta `kubernetes/`.
+
+1. **Configurar Credenciales**:
+   El archivo `kubernetes/config.yaml` contiene los Secrets (Base64). Asegúrate de actualizarlos con tus credenciales reales de Atlas.
+   
+2. **Aplicar Manifiestos**:
+   ```bash
+   kubectl apply -f kubernetes/config.yaml
+   kubectl apply -f kubernetes/redis.yaml
+   kubectl apply -f kubernetes/backend.yaml
+   ```
+
+---
+
+## 🚀 Desarrollo Local
 
 ### Opción 1: Con Docker (Recomendado)
 
@@ -63,38 +99,20 @@ docker-compose up -d
 
 ### Opción 2: Instalación Manual
 
-#### Backend (FastAPI + MongoDB + Redis)
-
+#### Backend
 ```bash
-# 1. Requisitos previos: MongoDB y Redis deben estar corriendo (local o docker)
-docker-compose up -d mongodb redis
-
-# 2. Configurar entorno
 cd backend
-cp .env.example .env
-# IMPORTANTE: Revisa .env y ajusta las credenciales de DB si es necesario
-
-# 3. Entorno virtual e instalación
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# 4. Ejecutar servidor
 uvicorn app.main:app --reload --host 0.0.0.0 --port 3001
 ```
 
-#### Frontend (React + TypeScript)
-
+#### Frontend
 ```bash
-# 1. Configurar entorno (CRÍTICO para imágenes)
 cd frontend
-cp .env.example .env
-# El archivo .env debe contener: VITE_API_URL=http://localhost:3001/api/v1
-
-# 2. Instalar y ejecutar
 npm install
 npm run dev
-
 # Acceder a http://localhost:5173
 ```
 
@@ -105,18 +123,20 @@ npm run dev
 ```
 cuenca-eventos/
 ├── backend/                 # Backend FastAPI
-│   ├── app/                # Código fuente API
-│   ├── scripts/            # Scripts de utilidad
-│   └── requirements.txt    # Dependencias Python
-├── frontend/               # Frontend React + Vite
-│   ├── public/             # Assets estáticos (PWA icons)
-│   ├── src/
-│   │   ├── components/     # Componentes (Hero, Maps, Gallery)
-│   │   ├── services/       # Cliente API (Axios)
-│   │   └── ...
-│   └── vite.config.ts      # Configuración Vite + PWA
-├── docker-compose.yml      # Orquestación
-└── README.md              # Documentación
+│   ├── app/                 # Código fuente API
+│   ├── requirements.txt     # Dependencias Python
+│   └── Dockerfile           # Contenedor Backend
+├── frontend/                # Frontend React + Vite
+│   ├── src/                 # Código fuente React
+│   └── vite.config.ts       # Configuración PWA
+├── kubernetes/              # Manifiestos K8s de producción
+│   ├── backend.yaml         # Deployment & Service
+│   └── config.yaml          # ConfigMap & Secrets
+├── scripts/                 # Utilidades de mantenimiento
+│   ├── migrate_db_safe.py   # Migración segura a Atlas
+│   └── cleanup.ps1          # Limpieza de archivos obsoletos
+├── docker-compose.yml       # Orquestación local
+└── README.md                # Documentación
 ```
 
 ---
@@ -137,10 +157,11 @@ cuenca-eventos/
 | Tecnología | Versión | Propósito |
 |------------|---------|-----------|
 | Python | 3.11+ | Lenguaje base |
-| FastAPI | 0.100+ | API REST de alto rendimiento |
+| FastAPI | 0.115+ | API REST de alto rendimiento |
 | MongoDB | Latest | Persistencia de datos (Motor) |
-| Beanie ODM | - | ORM asíncrono para MongoDB |
-| Redis | Latest | Caché y sesiones |
+| Redis | 7.x | Caché y Rate Limiting |
+| Kubernetes | 1.2x | Orquestación de contenedores |
+
 
 ---
 

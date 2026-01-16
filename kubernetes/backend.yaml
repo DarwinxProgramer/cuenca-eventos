@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  labels:
+    app: cuenca-eventos-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cuenca-eventos-backend
+  template:
+    metadata:
+      labels:
+        app: cuenca-eventos-backend
+    spec:
+      containers:
+      - name: backend
+        image: darwinxprogramer/cuenca-eventos-backend:latest # Placeholder image name
+        ports:
+        - containerPort: 3001
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-secrets
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 15
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: cuenca-eventos-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3001
+  type: LoadBalancer

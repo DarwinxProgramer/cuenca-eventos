@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     PORT: int = 3001
     
     # MongoDB  
-    MONGODB_URI: str = "mongodb://localhost:27017"
+    MONGODB_URL: str = "mongodb://localhost:27017"
     MONGODB_DB_NAME: str = "cuenca_eventos"
     
     # Redis

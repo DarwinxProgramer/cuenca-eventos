@@ -65,6 +65,17 @@ const getHeaders = (includeAuth: boolean = true): HeadersInit => {
 };
 
 /**
+ * Headers como objeto plano (para guardar en IndexedDB)
+ */
+const getHeadersObject = (includeAuth: boolean = true): Record<string, string> => {
+    const token = includeAuth ? getAccessToken() : null;
+    return {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+};
+
+/**
  * Manejar respuesta de la API
  */
 const handleResponse = async <T>(response: Response): Promise<T> => {
@@ -79,8 +90,21 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
             }
         }
 
-        const error = await response.json().catch(() => ({ detail: 'Error desconocido' }));
-        throw new Error(error.detail || `Error ${response.status}`);
+        const errorBody = await response.json().catch(() => ({ detail: 'Error desconocido' }));
+
+        let errorMessage = errorBody.detail || `Error ${response.status}`;
+
+        // Si el detalle es un objeto o array (ej: errores de validación de FastAPI), convertir a string
+        if (typeof errorMessage === 'object') {
+            // Si es un array de errores de validación, intentar formatearlo mejor
+            if (Array.isArray(errorMessage) && errorMessage.length > 0 && errorMessage[0].msg) {
+                errorMessage = errorMessage.map((e: any) => `${e.loc?.join('.')} ${e.msg}`).join(', ');
+            } else {
+                errorMessage = JSON.stringify(errorMessage);
+            }
+        }
+
+        throw new Error(errorMessage);
     }
 
     // Si es 204 No Content, retornar null
@@ -121,6 +145,23 @@ const refreshAccessToken = async (): Promise<boolean> => {
 // MÉTODOS HTTP
 // ============================================
 
+import { syncQueue } from './syncQueue';
+
+/**
+ * Detectar si el error es de red (sin conexión)
+ */
+const isNetworkError = (error: any): boolean => {
+    const message = error?.message || '';
+    // Chrome/Edge/Firefox suelen usar 'Failed to fetch' o 'NetworkError'
+    // Pero a veces el mensaje varía o el tipo de error no es exactamente TypeError
+    return message.includes('Failed to fetch') ||
+        message.includes('NetworkError') ||
+        message.includes('Network request failed') ||
+        message.includes('connection refused') ||
+        // Fallback final: si estamos offline según el navegador, asumimos que es error de red
+        (!navigator.onLine);
+};
+
 export const api = {
     /**
      * GET request
@@ -134,38 +175,91 @@ export const api = {
     },
 
     /**
-     * POST request
+     * POST request (con queue offline)
      */
     post: async <T>(endpoint: string, data?: unknown, auth: boolean = true): Promise<T> => {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: getHeaders(auth),
-            body: data ? JSON.stringify(data) : undefined,
-        });
-        return handleResponse<T>(response);
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'POST',
+                headers: getHeaders(auth),
+                body: data ? JSON.stringify(data) : undefined,
+            });
+            return handleResponse<T>(response);
+        } catch (error) {
+            // Si es error de red, encolar operación
+            if (isNetworkError(error)) {
+                await syncQueue.queueOperation({
+                    operation: 'CREATE',
+                    endpoint,
+                    method: 'POST',
+                    data,
+                    headers: getHeadersObject(auth),
+                });
+
+                // Retornar respuesta optimista con ID temporal
+                return {
+                    _id: `temp-${Date.now()}`,
+                    ...(typeof data === 'object' && data !== null ? data : {}),
+                } as T;
+            }
+            throw error;
+        }
     },
 
     /**
-     * PUT request
+     * PUT request (con queue offline)
      */
     put: async <T>(endpoint: string, data: unknown, auth: boolean = true): Promise<T> => {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'PUT',
-            headers: getHeaders(auth),
-            body: JSON.stringify(data),
-        });
-        return handleResponse<T>(response);
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'PUT',
+                headers: getHeaders(auth),
+                body: JSON.stringify(data),
+            });
+            return handleResponse<T>(response);
+        } catch (error) {
+            // Si es error de red, encolar operación
+            if (isNetworkError(error)) {
+                await syncQueue.queueOperation({
+                    operation: 'UPDATE',
+                    endpoint,
+                    method: 'PUT',
+                    data,
+                    headers: getHeadersObject(auth),
+                });
+
+                // Retornar data optimista
+                return data as T;
+            }
+            throw error;
+        }
     },
 
     /**
-     * DELETE request
+     * DELETE request (con queue offline)
      */
     delete: async <T>(endpoint: string, auth: boolean = true): Promise<T> => {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            method: 'DELETE',
-            headers: getHeaders(auth),
-        });
-        return handleResponse<T>(response);
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'DELETE',
+                headers: getHeaders(auth),
+            });
+            return handleResponse<T>(response);
+        } catch (error) {
+            // Si es error de red, encolar operación
+            if (isNetworkError(error)) {
+                await syncQueue.queueOperation({
+                    operation: 'DELETE',
+                    endpoint,
+                    method: 'DELETE',
+                    headers: getHeadersObject(auth),
+                });
+
+                // Retornar respuesta vacía optimista
+                return { message: 'Operación encolada' } as T;
+            }
+            throw error;
+        }
     },
 
     /**

@@ -15,6 +15,9 @@ from app.core.cache import connect_to_redis, close_redis_connection
 async def lifespan(app: FastAPI):
     """Gestión del ciclo de vida de la aplicación"""
     # Startup
+    from app.core.logger import configure_logger
+    configure_logger()
+    
     await connect_to_mongodb()
     await connect_to_redis()
     print(f"🚀 {settings.PROJECT_NAME} v{settings.VERSION} iniciado")
@@ -46,6 +49,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Configurar Rate Limit
+from app.core.ratelimit import limiter, RateLimitExceeded, _rate_limit_exceeded_handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # Health check endpoint

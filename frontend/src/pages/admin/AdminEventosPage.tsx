@@ -2,49 +2,44 @@
  * AdminEventosPage - Gestión de eventos
  * Lista, crear, editar y eliminar eventos
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
-import { adminApi, Event } from '../../services/adminApi';
+import { adminApi } from '../../services/adminApi';
+import { dbService } from '../../services/db';
+import toast from 'react-hot-toast';
+import { useEvents } from '../../hooks/useEvents';
 
 export default function AdminEventosPage() {
     const { isDark } = useTheme();
     const navigate = useNavigate();
-    const [events, setEvents] = useState<Event[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+
+    // Usar hook con cache offline
+    const { data: events = [], isLoading: loading, error: hookError, refetch } = useEvents();
+
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState<string>('');
 
-    useEffect(() => {
-        loadEvents();
-    }, []);
-
-    const loadEvents = async () => {
-        setLoading(true);
-        try {
-            const data = await adminApi.events.list();
-            setEvents(data);
-            setError(null);
-        } catch (err) {
-            setError('Error al cargar eventos');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const error = hookError ? 'Error al cargar eventos' : null;
 
     const handleDelete = async (id: string, title: string) => {
         if (!confirm(`¿Estás seguro de eliminar "${title}"?`)) return;
 
         setDeletingId(id);
+        const toastId = toast.loading('Eliminando...');
+
         try {
             await adminApi.events.delete(id);
-            setEvents(events.filter(e => e._id !== id));
+
+            // Actualización optimista Offline: borrar de IDB local
+            await dbService.deleteEvent(id);
+
+            await refetch();
+            toast.success('Evento eliminado', { id: toastId });
         } catch (err) {
-            alert('Error al eliminar evento');
+            toast.error('Error al eliminar evento', { id: toastId });
             console.error(err);
         } finally {
             setDeletingId(null);
@@ -149,7 +144,7 @@ export default function AdminEventosPage() {
                 {error && (
                     <div className="mb-6 p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-500">
                         ❌ {error}
-                        <button onClick={loadEvents} className="ml-4 underline">Reintentar</button>
+                        <p className="text-sm mt-1">Los eventos se cargarán desde cache local si están disponibles</p>
                     </div>
                 )}
 

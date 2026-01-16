@@ -2,10 +2,12 @@
  * AdminEventoFormPage - Formulario para crear/editar eventos
  */
 import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
 import { adminApi, EventCreate } from '../../services/adminApi';
+import { dbService } from '../../services/db';
 
 const initialFormData: EventCreate = {
     title: '',
@@ -49,33 +51,53 @@ export default function AdminEventoFormPage() {
         }
     }, [id]);
 
+    // Helper to fill form data
+    const fillFormWithEvent = (event: any) => {
+        setFormData({
+            title: event.title,
+            description: event.description,
+            long_description: event.long_description || '',
+            date: event.date.split('T')[0],
+            time: event.time,
+            end_time: event.end_time || '',
+            location: event.location,
+            address: event.address || '',
+            coordinates: event.coordinates,
+            category: event.category,
+            itinerary: event.itinerary || [],
+            closed_streets: event.closed_streets || [],
+        });
+
+        if (event.image_url) {
+            setCurrentImageUrl(event.image_url);
+        }
+
+        // Set coordinate strings
+        setLatString(event.coordinates.lat.toString());
+        setLngString(event.coordinates.lng.toString());
+    };
+
     const loadEvent = async () => {
         setLoading(true);
         try {
             const event = await adminApi.events.get(id!);
-            setFormData({
-                title: event.title,
-                description: event.description,
-                long_description: event.long_description || '',
-                date: event.date.split('T')[0],
-                time: event.time,
-                end_time: event.end_time || '',
-                location: event.location,
-                address: event.address || '',
-                coordinates: event.coordinates,
-                category: event.category,
-                itinerary: event.itinerary || [],
-                closed_streets: event.closed_streets || [],
-            });
-            if (event.image_url) {
-                setCurrentImageUrl(event.image_url);
-            }
-            // Set coordinate strings
-            setLatString(event.coordinates.lat.toString());
-            setLngString(event.coordinates.lng.toString());
+            fillFormWithEvent(event);
         } catch (err) {
-            setError('Error al cargar evento');
-            console.error(err);
+            console.log('Error cargando de API, intentando cache...', err);
+            try {
+                const cachedEvents = await dbService.getEvents();
+                const cachedEvent = cachedEvents.find(e => e._id === id);
+
+                if (cachedEvent) {
+                    fillFormWithEvent(cachedEvent);
+                    // Opcional: toast.success('Cargado desde caché offline');
+                } else {
+                    throw new Error('No encontrado en caché');
+                }
+            } catch (cacheErr) {
+                setError('Error al cargar evento. Verifica tu conexión.');
+                console.error(err);
+            }
         } finally {
             setLoading(false);
         }
@@ -103,11 +125,9 @@ export default function AdminEventoFormPage() {
                 try {
                     const uploadRes = await adminApi.images.upload(imageFile);
                     dataToSend.image_id = uploadRes.id;
-                } catch (uploadErr) {
+                } catch (uploadErr: any) {
                     console.error('Error subiendo imagen:', uploadErr);
-                    // Opcional: mostrar error pero intentar guardar evento igual, o fallar.
-                    // Decidimos fallar para que el usuario sepa.
-                    throw new Error('Error al subir la imagen');
+                    toast('No se pudo subir la imagen. Se omitirá.', { icon: '⚠️' });
                 }
             }
 
@@ -118,8 +138,8 @@ export default function AdminEventoFormPage() {
             }
 
             navigate('/admin/eventos');
-        } catch (err) {
-            setError(`Error al ${isEditing ? 'actualizar' : 'crear'} evento`);
+        } catch (err: any) {
+            setError(err.message || `Error al ${isEditing ? 'actualizar' : 'crear'} evento`);
             console.error(err);
         } finally {
             setSaving(false);

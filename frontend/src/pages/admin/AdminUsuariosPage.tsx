@@ -2,21 +2,23 @@
  * AdminUsuariosPage - Gestión de usuarios registrados
  * Lista, ver y gestionar usuarios reales desde la API
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
 import { adminApi, User } from '../../services/adminApi';
+import { dbService } from '../../services/db';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUsersData } from '../../hooks/useUsersData';
+import toast from 'react-hot-toast';
 
 export default function AdminUsuariosPage() {
     const { isDark } = useTheme();
     const { currentUser } = useAuth();
-    const [users, setUsers] = useState<User[]>([]);
+    // Usar hook con cache offline
+    const { data: users = [], isLoading: loading, error: hookError, isError, refetch } = useUsersData();
     const [searchTerm, setSearchTerm] = useState('');
-    const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -36,32 +38,12 @@ export default function AdminUsuariosPage() {
         role: 'user' as 'user' | 'admin'
     });
 
-    useEffect(() => {
-        loadUsers();
-    }, []);
-
-    const loadUsers = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            // El endpoint devuelve User[]
-            const data = await adminApi.users.list();
-            console.log('Usuarios cargados:', data);
-            setUsers(data);
-        } catch (err: any) {
-            console.error('Error cargando usuarios:', err);
-            setError(err.message || 'Error al cargar usuarios');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             setActionLoading('creating');
             // Usar endpoint de registro para crear usuario
-            await adminApi.users.create({
+            let createdUser = await adminApi.users.create({
                 name: newUserData.name,
                 email: newUserData.email,
                 password: newUserData.password,
@@ -71,12 +53,15 @@ export default function AdminUsuariosPage() {
 
             // Si se creó como admin, actualizar el rol
             if (newUserData.role === 'admin') {
-                const users = await adminApi.users.list();
-                const createdUser = users.find(u => u.email === newUserData.email);
-                if (createdUser) {
+                // Si es offline, la actualización de rol también se encola
+                try {
                     await adminApi.users.update(createdUser._id, { role: 'admin' });
-                }
+                    createdUser.role = 'admin'; // Forzar rol en local
+                } catch (ignore) { /* si falla update rol, seguimos */ }
             }
+
+            // Offline Optimista
+            await dbService.saveUser(createdUser);
 
             setShowCreateModal(false);
             setNewUserData({
@@ -87,10 +72,11 @@ export default function AdminUsuariosPage() {
                 city: 'Cuenca',
                 role: 'user'
             });
-            loadUsers();
+            toast.success('Usuario creado');
+            await refetch();
         } catch (err: any) {
             console.error('Error creando usuario:', err);
-            alert('Error al crear usuario: ' + (err.message || 'Error desconocido'));
+            toast.error('Error al crear usuario: ' + (err.message || 'Error desconocido'));
         } finally {
             setActionLoading(null);
         }
@@ -104,11 +90,14 @@ export default function AdminUsuariosPage() {
         try {
             setActionLoading(userId);
             await adminApi.users.delete(userId);
-            // Actualizar lista localmente
-            setUsers(users.filter(u => u._id !== userId));
+            // Offline Optimista
+            await dbService.deleteUser(userId);
+
+            toast.success('Usuario eliminado');
+            await refetch();
         } catch (error) {
             console.error('Error eliminando usuario:', error);
-            alert('Error al eliminar usuario');
+            toast.error('Error al eliminar usuario');
         } finally {
             setActionLoading(null);
         }
@@ -132,19 +121,23 @@ export default function AdminUsuariosPage() {
 
         try {
             setActionLoading(editingUser._id);
-            await adminApi.users.update(editingUser._id, {
+            const updated = await adminApi.users.update(editingUser._id, {
                 name: editUserData.name,
                 phone: editUserData.phone,
                 city: editUserData.city,
                 role: editUserData.role
             });
 
+            // Offline Optimista
+            await dbService.saveUser(updated);
+
             setShowEditModal(false);
             setEditingUser(null);
-            loadUsers();
+            toast.success('Usuario actualizado');
+            await refetch();
         } catch (err: any) {
             console.error('Error editando usuario:', err);
-            alert('Error al editar usuario: ' + (err.message || 'Error desconocido'));
+            toast.error('Error al editar usuario: ' + (err.message || 'Error desconocido'));
         } finally {
             setActionLoading(null);
         }
@@ -184,10 +177,10 @@ export default function AdminUsuariosPage() {
                 </div>
 
                 {/* Error Display - Moved here to be visible */}
-                {error && (
+                {isError && (
                     <div className="mb-6 p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-500">
-                        ❌ {error}
-                        <button onClick={loadUsers} className="ml-4 underline">Reintentar</button>
+                        ❌ {(hookError as any)?.message || 'Error al cargar usuarios'}
+                        <button onClick={() => refetch()} className="ml-4 underline">Reintentar</button>
                     </div>
                 )}
 
@@ -248,6 +241,11 @@ export default function AdminUsuariosPage() {
                                                     </span>
                                                 )}
                                             </div>
+                                            {user._id.startsWith('temp-') && (
+                                                <div className="text-xs text-amber-500 dark:text-amber-400 mb-1 flex items-center gap-1">
+                                                    📡 Pendiente de Sincronizar
+                                                </div>
+                                            )}
                                             <p className={`text-sm truncate ${isDark ? 'text-surface-400' : 'text-surface-500'}`}>
                                                 {user.email}
                                             </p>

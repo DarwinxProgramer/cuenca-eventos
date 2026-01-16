@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
 import { eventsApi, EventFromAPI, getImageUrl } from '../../services/eventsApi';
 import { agendaApi } from '../../services/agendaApi';
+import { dbService } from '../../services/db';
 
 // Helper functions
 const getCategoryLabel = (category: string): string => {
@@ -48,8 +49,15 @@ export default function MiAgendaPage() {
     const loadData = async () => {
         setLoading(true);
         try {
-            // Load all events
-            const allEvents = await eventsApi.list();
+            // Load all events with offline fallback
+            let allEvents: EventFromAPI[] = [];
+            try {
+                allEvents = await eventsApi.list();
+                await dbService.saveEvents(allEvents);
+            } catch (err) {
+                console.log('Events API failed, falling back to cache');
+                allEvents = await dbService.getEvents();
+            }
 
             // Filter upcoming events
             const today = new Date();
@@ -59,28 +67,35 @@ export default function MiAgendaPage() {
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
             setUpcomingEvents(upcoming);
 
-            // Load user's agenda
+            // Load user's agenda with offline fallback
             if (currentUser) {
+                let userAgenda: { attending: string[], interested: string[] } = { attending: [], interested: [] };
+                const userId = currentUser._id || (currentUser as any).id;
+
                 try {
-                    const userAgenda = await agendaApi.get();
-
-                    // Filter events for attending and interested
-                    const attending = allEvents.filter(event =>
-                        userAgenda.attending.includes(event._id) && new Date(event.date) >= today
-                    );
-                    const interested = allEvents.filter(event =>
-                        userAgenda.interested.includes(event._id) && new Date(event.date) >= today
-                    );
-
-                    setAttendingEvents(attending);
-                    setInterestedEvents(interested);
+                    userAgenda = await agendaApi.get();
+                    await dbService.saveAgenda(userId, userAgenda);
                 } catch (agendaErr) {
-                    console.error('Error loading agenda:', agendaErr);
-                    // Continue without agenda data
+                    console.error('Error loading agenda API, checking cache:', agendaErr);
+                    const cachedAgenda = await dbService.getAgenda(userId);
+                    if (cachedAgenda) {
+                        userAgenda = cachedAgenda as any;
+                    }
                 }
+
+                // Filter events for attending and interested
+                const attending = allEvents.filter(event =>
+                    userAgenda.attending.includes(event._id) && new Date(event.date) >= today
+                );
+                const interested = allEvents.filter(event =>
+                    userAgenda.interested.includes(event._id) && new Date(event.date) >= today
+                );
+
+                setAttendingEvents(attending);
+                setInterestedEvents(interested);
             }
         } catch (err) {
-            console.error('Error loading events:', err);
+            console.error('Error loading data:', err);
         } finally {
             setLoading(false);
         }

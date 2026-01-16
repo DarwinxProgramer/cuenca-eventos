@@ -1,17 +1,25 @@
 """
 Router de eventos - /events
 CRUD completo para gestión de eventos culturales
+Refactorizado para usar Clean Architecture (EventService)
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 from datetime import datetime, date
-from beanie import PydanticObjectId
 
-from app.core.dependencies import get_current_user, get_current_user_optional, require_admin
-from app.core.cache import invalidate_events_cache
+from app.core.dependencies import get_current_user_optional, require_admin
+# from app.core.cache import invalidate_events_cache # Ya no es necesario aquí, lo maneja el servicio si quisiera, o lo dejamos aquí pero llamando al servicio
+# Nota: La invalidación de caché la hacía el router antes. De momento la dejamos fuera o la agregamos al servicio.
+# En la implementación anterior del Router, se llamaba a invalidate_events_cache() después de create/update/delete.
+# Idealmente el servicio debería encargarse de esto o tener un decorador.
+# Por simplicidad y para no romper nada, agregaremos la invalidación aquí o en el servicio.
+# En mi implementación de EventService NO incluí caché invalidation. Debería agregarlo.
+from app.core.cache import invalidate_events_cache 
+
 from app.models.user import User
-from app.models.event import Event, EventCategory, GeoJSONPoint
+from app.models.event import Event, EventCategory
 from app.schemas.event import EventCreate, EventUpdate, EventResponse, EventSummary
+from app.services.event_service import event_service
 
 router = APIRouter(prefix="/events")
 
@@ -28,31 +36,15 @@ async def get_events(
     upcoming: bool = Query(False, description="Solo eventos futuros"),
     user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """
-    Listar eventos con filtros opcionales
+    """Listar eventos con filtros opcionales"""
+    events = await event_service.get_multi(
+        skip=skip,
+        limit=limit,
+        category=category,
+        upcoming=upcoming
+    )
     
-    - **skip**: Paginación - número de eventos a saltar
-    - **limit**: Máximo de eventos a retornar
-    - **category**: Filtrar por categoría
-    - **upcoming**: Si true, solo retorna eventos futuros
-    """
-    query = {}
-    
-    # Filtro por categoría
-    if category:
-        query["category"] = category
-    
-    # Filtro por fecha futura
-    if upcoming:
-        query["date"] = {"$gte": datetime.utcnow()}
-    
-    # Ejecutar consulta
-    if query:
-        events = await Event.find(query).skip(skip).limit(limit).sort("-date").to_list()
-    else:
-        events = await Event.find_all().skip(skip).limit(limit).sort("-date").to_list()
-    
-    # Transformar a respuesta
+    # Transformar a respuesta (Manual mapping por diferencia de estructuras GeoJSON vs LatLng)
     return [
         EventSummary(
             _id=str(event.id),
@@ -73,12 +65,8 @@ async def get_events(
 async def get_upcoming_events(
     limit: int = Query(10, ge=1, le=50, description="Límite de eventos")
 ):
-    """
-    Obtener próximos eventos ordenados por fecha
-    """
-    events = await Event.find(
-        Event.date >= datetime.utcnow()
-    ).sort("+date").limit(limit).to_list()
+    """Obtener próximos eventos ordenados por fecha"""
+    events = await event_service.get_upcoming(limit=limit)
     
     return [
         EventSummary(
@@ -98,17 +86,8 @@ async def get_upcoming_events(
 
 @router.get("/date/{event_date}", response_model=List[EventSummary])
 async def get_events_by_date(event_date: date):
-    """
-    Obtener eventos de una fecha específica
-    """
-    # Crear rango de fechas para ese día
-    start_of_day = datetime.combine(event_date, datetime.min.time())
-    end_of_day = datetime.combine(event_date, datetime.max.time())
-    
-    events = await Event.find(
-        Event.date >= start_of_day,
-        Event.date <= end_of_day
-    ).sort("+time").to_list()
+    """Obtener eventos de una fecha específica"""
+    events = await event_service.get_by_date(event_date)
     
     return [
         EventSummary(
@@ -133,40 +112,22 @@ async def get_nearby_events(
     max_distance: int = Query(5000, ge=100, le=50000, description="Distancia máxima en metros"),
     limit: int = Query(10, ge=1, le=50)
 ):
-    """
-    Obtener eventos cercanos a una ubicación usando índice geoespacial
+    """Obtener eventos cercanos a una ubicación"""
+    events = await event_service.get_nearby(lat=lat, lng=lng, max_distance=max_distance, limit=limit)
     
-    - **lat**: Latitud del punto de referencia
-    - **lng**: Longitud del punto de referencia
-    - **max_distance**: Radio de búsqueda en metros (default: 5km)
-    """
-    # Consulta geoespacial con $nearSphere
-    pipeline = [
-        {
-            "$geoNear": {
-                "near": {"type": "Point", "coordinates": [lng, lat]},
-                "distanceField": "distance",
-                "maxDistance": max_distance,
-                "spherical": True
-            }
-        },
-        {"$match": {"date": {"$gte": datetime.utcnow()}}},
-        {"$limit": limit}
-    ]
-    
-    events = await Event.aggregate(pipeline).to_list()
-    
+    # Nota: get_nearby devuelve objetos Event completos, no agregaciones crudas
+    # (Beanie maneja el mapeo)
     return [
         EventSummary(
-            _id=str(event["_id"]),
-            title=event["title"],
-            description=event["description"],
-            date=event["date"],
-            time=event["time"],
-            location=event["location"],
-            coordinates={"lat": event["coordinates"]["coordinates"][1], "lng": event["coordinates"]["coordinates"][0]},
-            category=event["category"],
-            image_url=f"/api/v1/images/{event['image_id']}" if event.get("image_id") else None
+            _id=str(event.id),
+            title=event.title,
+            description=event.description,
+            date=event.date,
+            time=event.time,
+            location=event.location,
+            coordinates={"lat": event.coordinates.lat, "lng": event.coordinates.lng},
+            category=event.category,
+            image_url=f"/api/v1/images/{event.image_id}" if event.image_id else None
         )
         for event in events
     ]
@@ -174,16 +135,8 @@ async def get_nearby_events(
 
 @router.get("/{event_id}", response_model=EventResponse)
 async def get_event(event_id: str):
-    """
-    Obtener detalle de un evento por ID
-    """
-    try:
-        event = await Event.get(event_id)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Evento no encontrado"
-        )
+    """Obtener detalle de un evento por ID"""
+    event = await event_service.get(event_id)
     
     if not event:
         raise HTTPException(
@@ -222,36 +175,10 @@ async def create_event(
     event_data: EventCreate,
     admin: User = Depends(require_admin)
 ):
-    """
-    Crear nuevo evento (solo administradores)
-    """
-    # Crear GeoJSONPoint desde coordenadas
-    coordinates = GeoJSONPoint.from_lat_lng(
-        lat=event_data.coordinates.lat,
-        lng=event_data.coordinates.lng
-    )
+    """Crear nuevo evento (solo administradores)"""
+    event = await event_service.create(event_data)
     
-    # Crear evento
-    event = Event(
-        title=event_data.title,
-        description=event_data.description,
-        long_description=event_data.long_description,
-        date=event_data.date,
-        time=event_data.time,
-        end_time=event_data.end_time,
-        location=event_data.location,
-        address=event_data.address,
-        coordinates=coordinates,
-        category=event_data.category,
-        image_id=PydanticObjectId(event_data.image_id) if event_data.image_id else None,
-        gallery=[PydanticObjectId(img_id) for img_id in event_data.gallery],
-        itinerary=event_data.itinerary,
-        closed_streets=event_data.closed_streets
-    )
-    
-    await event.insert()
-    
-    # Invalidar caché de eventos
+    # Invalidar caché
     await invalidate_events_cache()
     
     return EventResponse(
@@ -282,52 +209,18 @@ async def update_event(
     event_data: EventUpdate,
     admin: User = Depends(require_admin)
 ):
-    """
-    Actualizar evento existente (solo administradores)
-    """
-    try:
-        event = await Event.get(event_id)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Evento no encontrado"
-        )
-    
+    """Actualizar evento existente (solo administradores)"""
+    event = await event_service.get(event_id)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evento no encontrado"
         )
     
-    # Actualizar campos proporcionados
-    update_data = event_data.model_dump(exclude_unset=True)
+    event = await event_service.update(event, event_data)
     
-    # Manejar coordenadas especialmente
-    if "coordinates" in update_data and update_data["coordinates"]:
-        update_data["coordinates"] = GeoJSONPoint.from_lat_lng(
-            lat=update_data["coordinates"]["lat"],
-            lng=update_data["coordinates"]["lng"]
-        )
-    
-    # Manejar image_id
-    if "image_id" in update_data and update_data["image_id"]:
-        update_data["image_id"] = PydanticObjectId(update_data["image_id"])
-    
-    # Manejar gallery
-    if "gallery" in update_data and update_data["gallery"]:
-        update_data["gallery"] = [PydanticObjectId(img_id) for img_id in update_data["gallery"]]
-    
-    # Actualizar timestamp
-    update_data["updated_at"] = datetime.utcnow()
-    
-    # Aplicar actualizaciones
-    await event.update({"$set": update_data})
-    
-    # Invalidar caché de eventos
+    # Invalidar caché
     await invalidate_events_cache()
-    
-    # Recargar evento actualizado
-    event = await Event.get(event_id)
     
     return EventResponse(
         _id=str(event.id),
@@ -356,26 +249,15 @@ async def delete_event(
     event_id: str,
     admin: User = Depends(require_admin)
 ):
-    """
-    Eliminar evento (solo administradores)
-    """
-    try:
-        event = await Event.get(event_id)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Evento no encontrado"
-        )
-    
+    """Eliminar evento (solo administradores)"""
+    event = await event_service.delete(event_id)
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evento no encontrado"
         )
     
-    await event.delete()
-    
-    # Invalidar caché de eventos
+    # Invalidar caché
     await invalidate_events_cache()
     
     return None

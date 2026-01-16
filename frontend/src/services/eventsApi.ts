@@ -48,16 +48,19 @@ export interface RouteFromAPI {
     _id: string;
     name: string;
     description: string;
-    category: string;
+    category: 'cultural' | 'gastronomica' | 'religiosa' | 'aventura';
     duration: string;
     distance: string;
-    difficulty: string;
+    difficulty: 'facil' | 'moderada' | 'dificil';
     stops?: Array<{
         name: string;
         coordinates: { lat: number; lng: number };
     }>;
     image_id?: string;
     image_url?: string;  // Added: some endpoints return image_url instead of image_id
+    events?: string[];
+    created_at?: string;
+    updated_at?: string;
 }
 
 // URL base para imágenes de GridFS
@@ -161,6 +164,13 @@ export const routesApi = {
      */
     get: async (id: string): Promise<RouteFromAPI> => {
         return api.get<RouteFromAPI>(`/routes/${id}`, false);
+    },
+
+    /**
+     * Crear ruta (público/usuario)
+     */
+    create: async (data: any): Promise<RouteFromAPI> => {
+        return api.post<RouteFromAPI>('/routes/', data);
     },
 };
 

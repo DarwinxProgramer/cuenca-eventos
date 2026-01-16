@@ -2,8 +2,9 @@
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
-import { eventsApi, EventFromAPI, getImageUrl } from '../../services/eventsApi';
+import { EventFromAPI, getImageUrl } from '../../services/eventsApi';
 import { agendaApi } from '../../services/agendaApi';
+import { useEvents } from '../../hooks/useEvents';
 
 // Helper functions for categories
 const getCategoryLabel = (category: string): string => {
@@ -35,8 +36,8 @@ export default function EventosPage() {
     const { isDark } = useTheme();
     const { currentUser } = useAuth();
     const [events, setEvents] = useState<EventFromAPI[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    // const [loading, setLoading] = useState(true); // Replaced by hook
+    // const [error, setError] = useState<string | null>(null); // Replaced by hook
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -45,30 +46,29 @@ export default function EventosPage() {
 
     const categories = ['all', 'cultural', 'religioso', 'gastronomico', 'artistico', 'tradicional'];
 
-    // Load events and user agenda from API
+    // Load events using TanStack Query
+    const {
+        data: eventsData,
+        isLoading: loading,
+        error: errorQuery
+    } = useEvents({ category: selectedCategory !== 'all' ? selectedCategory : undefined });
+
+    // Handle events state
     useEffect(() => {
-        loadEvents();
+        if (eventsData) {
+            // Sort by date ascending (although backend should do this ideally)
+            const sorted = [...eventsData].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            setEvents(sorted);
+        }
+    }, [eventsData]);
+
+    const error = errorQuery ? 'Error al cargar eventos. Verifica la conexión con el servidor.' : null;
+
+    useEffect(() => {
         if (currentUser) {
             loadUserAgenda();
         }
-    }, [selectedCategory, currentUser]);
-
-    const loadEvents = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const category = selectedCategory !== 'all' ? selectedCategory : undefined;
-            const data = await eventsApi.list(category);
-            // Sort by date ascending
-            const sorted = data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-            setEvents(sorted);
-        } catch (err) {
-            console.error('Error loading events:', err);
-            setError('Error al cargar eventos. Verifica la conexión con el servidor.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [currentUser]);
 
     const loadUserAgenda = async () => {
         try {
@@ -260,9 +260,6 @@ export default function EventosPage() {
                 {error && (
                     <div className="mb-6 p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-500">
                         ❌ {error}
-                        <button onClick={loadEvents} className="ml-4 underline hover:no-underline">
-                            Reintentar
-                        </button>
                     </div>
                 )}
 

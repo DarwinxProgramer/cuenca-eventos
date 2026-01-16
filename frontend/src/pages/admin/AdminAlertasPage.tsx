@@ -2,17 +2,21 @@
  * AdminAlertasPage - Gestión de alertas de tránsito
  * Lista, crear, editar y eliminar alertas
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
 import { adminApi, Alert, AlertCreate } from '../../services/adminApi';
+import { dbService } from '../../services/db';
+import { useAlertsData } from '../../hooks/useAlertsData';
+import toast from 'react-hot-toast';
 
 export default function AdminAlertasPage() {
     const { isDark } = useTheme();
-    const [alerts, setAlerts] = useState<Alert[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    // Usar hook con cache offline
+    const { data: alerts = [], isLoading: loading, error: hookError, isError, refetch } = useAlertsData();
+
+    // const [error, setError] = useState<string | null>(null); // Removed unused local error
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [showModal, setShowModal] = useState(false);
     const [editingAlert, setEditingAlert] = useState<Alert | null>(null);
@@ -26,32 +30,18 @@ export default function AdminAlertasPage() {
         end_date: '',
     });
 
-    useEffect(() => {
-        loadAlerts();
-    }, []);
-
-    const loadAlerts = async () => {
-        setLoading(true);
-        try {
-            const data = await adminApi.alerts.list();
-            setAlerts(data);
-            setError(null);
-        } catch (err) {
-            setError('Error al cargar alertas');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleDelete = async (id: string, title: string) => {
         if (!confirm(`¿Eliminar alerta "${title}"?`)) return;
         setDeletingId(id);
         try {
             await adminApi.alerts.delete(id);
-            setAlerts(alerts.filter(a => a._id !== id));
+            // Offline Optimista
+            await dbService.deleteAlert(id);
+
+            toast.success('Alerta eliminada');
+            await refetch();
         } catch (err) {
-            alert('Error al eliminar');
+            toast.error('Error al eliminar');
         } finally {
             setDeletingId(null);
         }
@@ -95,14 +85,20 @@ export default function AdminAlertasPage() {
             };
 
             if (editingAlert) {
-                await adminApi.alerts.update(editingAlert._id, dataToSend);
+                const updated = await adminApi.alerts.update(editingAlert._id, dataToSend);
+                // Offline Optimista
+                await dbService.saveAlert(updated);
+                toast.success('Alerta actualizada');
             } else {
-                await adminApi.alerts.create(dataToSend);
+                const created = await adminApi.alerts.create(dataToSend);
+                // Offline Optimista
+                await dbService.saveAlert(created);
+                toast.success('Alerta creada');
             }
             setShowModal(false);
-            loadAlerts();
+            await refetch();
         } catch (err) {
-            alert('Error al guardar');
+            toast.error('Error al guardar');
         }
     };
 
@@ -140,9 +136,10 @@ export default function AdminAlertasPage() {
                     </div>
                 </div>
 
-                {error && (
+                {isError && (
                     <div className="mb-6 p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-500">
-                        ❌ {error} <button onClick={loadAlerts} className="ml-4 underline">Reintentar</button>
+                        ❌ {(hookError as any)?.message || 'Error al cargar alertas'}
+                        <button onClick={() => refetch()} className="ml-4 underline">Reintentar</button>
                     </div>
                 )}
 
@@ -167,7 +164,14 @@ export default function AdminAlertasPage() {
                                             {alert.is_active ? '● Activa' : '○ Inactiva'}
                                         </span>
                                     </div>
-                                    <h3 className={`font-bold mb-2 ${isDark ? 'text-white' : 'text-surface-900'}`}>{alert.title}</h3>
+                                    <div className="mb-2">
+                                        <h3 className={`font-bold ${isDark ? 'text-white' : 'text-surface-900'}`}>{alert.title}</h3>
+                                        {alert._id.startsWith('temp-') && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800 mt-1">
+                                                📡 Pendiente de Sincronizar
+                                            </span>
+                                        )}
+                                    </div>
                                     <p className={`text-sm mb-3 line-clamp-2 ${isDark ? 'text-surface-400' : 'text-surface-500'}`}>{alert.description}</p>
                                     <p className={`text-xs mb-3 ${isDark ? 'text-surface-500' : 'text-surface-400'}`}>
                                         📍 {alert.location} • {formatDate(alert.start_date)} - {formatDate(alert.end_date)}

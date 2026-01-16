@@ -8,14 +8,18 @@ pymongo==4.9.2
 motor==3.6.0
 beanie==1.27.0
 
-# Autenticación - versiones con binarios para Python 3.13
+# Autenticación
 python-jose==3.3.0
 cryptography==44.0.0
 passlib==1.7.4
 bcrypt==4.2.1
 
-# Caché
+# Caché & Rate Limiting
 redis==5.2.1
+slowapi==0.1.9
+
+# Logging
+structlog==24.1.0
 
 # Validación
 pydantic==2.10.4

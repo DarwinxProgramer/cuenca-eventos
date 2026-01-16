@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+data:
+  APP_NAME: "Cuenca Eventos API"
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  # Service discovery for K8s (using the redis service name)
+  REDIS_URL: "redis://redis-service:6379/0"
+  LOG_LEVEL: "INFO"
+  PORT: "3001"
+  # Frontend URL for CORS (JSON Array for Pydantic)
+  CORS_ORIGINS: '["https://cuenca-eventos-frontend.vercel.app", "http://localhost:5173"]'
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secrets
+type: Opaque
+data:
+  # Values must be base64 encoded
+  # MONGODB_URL: mongodb+srv://... 
+  MONGODB_URL: "bW9uZ29kYitzcnY6Ly9kYXJ3aW5jaHVxdWlfZGJfdXNlcjpvY0VnUVdUbE1vbGxpT1F0QGNsdXN0ZXJjdWVuY2FldmVudG9zLmIxcW1udGYubW9uZ29kYi5uZXQvY3VlbmNhX2V2ZW50b3M/cmV0cnlXcml0ZXM9dHJ1ZSZ3PW1ham9yaXR5JmFwcE5hbWU9Q2x1c3RlckN1ZW5jYUV2ZW50b3M="
+  # SECRET_KEY: Generated securely
+  SECRET_KEY: "SEZYVG15dlNIdEVxQ3hjNUlLc2JDcEw0SER4ZW5jT3FIY0tJRkRWR0tZYw=="
+  # ADMIN_PASSWORD: Generated securely
+  ADMIN_PASSWORD: "ckJHWHJqanVQbnRJNmtWZXFya1hNQQ=="

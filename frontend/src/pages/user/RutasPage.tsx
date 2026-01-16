@@ -2,6 +2,8 @@
 import { useTheme } from '../../contexts/ThemeContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
 import { routesApi, eventsApi, RouteFromAPI, EventFromAPI, getImageUrl } from '../../services/eventsApi';
+import { dbService } from '../../services/db';
+import toast from 'react-hot-toast';
 
 // Helper functions
 const getDifficultyColor = (difficulty: string) => {
@@ -26,8 +28,6 @@ const getCategoryLabel = (category: string): string => {
     return labels[category] || category;
 };
 
-
-
 // Placeholder image as base64 gradient
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiNmOTczMTY7c3RvcC1vcGFjaXR5OjEiIC8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdHlsZT0ic3RvcC1jb2xvcjojZWE1ODBlO3N0b3Atb3BhY2l0eToxIiAvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtc2l6ZT0iNDAiPvCfjok8L3RleHQ+PC9zdmc+';
 
@@ -47,21 +47,31 @@ export default function RutasPage() {
 
     const loadData = async () => {
         setLoading(true);
+
+        // Cargar rutas con fallback offline
         try {
-            const [routesData, eventsData] = await Promise.all([
-                routesApi.list(),
-                eventsApi.list()
-            ]);
+            const routesData = await routesApi.list();
+            await dbService.saveRoutes(routesData as any);
             setRoutes(routesData);
+        } catch (err) {
+            console.log('Error loading routes API, checking cache:', err);
+            const cachedRoutes = await dbService.getRoutes();
+            setRoutes(cachedRoutes);
+        }
+
+        // Cargar eventos con fallback offline
+        try {
+            const eventsData = await eventsApi.list();
+            await dbService.saveEvents(eventsData);
             setEvents(eventsData);
         } catch (err) {
-            console.error('Error loading data:', err);
-        } finally {
-            setLoading(false);
+            console.log('Error loading events API, checking cache:', err);
+            const cachedEvents = await dbService.getEvents();
+            setEvents(cachedEvents);
         }
+
+        setLoading(false);
     };
-
-
 
     const getDifficultyLabel = (difficulty: string) => {
         switch (difficulty) {
@@ -97,12 +107,35 @@ export default function RutasPage() {
         );
     };
 
-    const handleCreateRoute = () => {
+    const handleCreateRoute = async () => {
         if (newRouteEvents.length > 0 && newRouteName.trim()) {
-            alert(`¡Ruta "${newRouteName}" creada con ${newRouteEvents.length} eventos! (Próximamente guardará en el backend)`);
-            setIsCreatingRoute(false);
-            setNewRouteEvents([]);
-            setNewRouteName('');
+            const routeData: any = {
+                name: newRouteName,
+                description: 'Ruta personalizada creada por el usuario',
+                category: 'aventura',
+                duration: 'Variable',
+                distance: 'Variable',
+                difficulty: 'facil',
+                events: newRouteEvents,
+                stops: []
+            };
+
+            const toastId = toast.loading('Creando ruta...');
+            try {
+                const created = await routesApi.create(routeData);
+
+                // Offline Optimista
+                await dbService.saveRoute(created as any);
+                setRoutes(prev => [...prev, created]);
+
+                toast.success('Ruta creada', { id: toastId });
+                setIsCreatingRoute(false);
+                setNewRouteEvents([]);
+                setNewRouteName('');
+            } catch (err) {
+                console.error(err);
+                toast.error('Error al crear ruta', { id: toastId });
+            }
         }
     };
 
@@ -172,6 +205,11 @@ export default function RutasPage() {
                                     </div>
                                     <div className="absolute bottom-3 left-3 right-3 text-white">
                                         <h3 className="font-bold text-lg">{route.name}</h3>
+                                        {route._id.startsWith('temp-') && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-500/90 text-white border border-amber-400 mt-1">
+                                                📡 Pendiente Sync
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 

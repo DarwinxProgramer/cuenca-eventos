@@ -2,18 +2,26 @@
  * AdminRutasPage - Gestión de rutas turísticas
  * Lista, crear, editar y eliminar rutas
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import MenuPageLayout from '../../components/menu/MenuPageLayout';
 import { adminApi, Route as TouristRoute, RouteCreate } from '../../services/adminApi';
+import { dbService } from '../../services/db';
+import { useRoutesData } from '../../hooks/useRoutesData';
+import { useEvents } from '../../hooks/useEvents'; // También necesitamos eventos
+import toast from 'react-hot-toast';
 
 export default function AdminRutasPage() {
     const { isDark } = useTheme();
-    const [routes, setRoutes] = useState<TouristRoute[]>([]);
-    const [events, setEvents] = useState<any[]>([]); // Lista de eventos disponibles para agregar a rutas
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    // Usar hooks con cache offline
+    const { data: routes = [], isLoading: loadingRoutes, error, isError, refetch } = useRoutesData();
+    const { data: events = [] } = useEvents(); // Eventos también cacheados
+
+    // Combinar loading
+    const loading = loadingRoutes;
+
+    const [searchTerm, setSearchTerm] = useState('');
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [showModal, setShowModal] = useState(false);
     const [editingRoute, setEditingRoute] = useState<TouristRoute | null>(null);
@@ -36,36 +44,23 @@ export default function AdminRutasPage() {
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const [routesData, eventsData] = await Promise.all([
-                adminApi.routes.list(),
-                adminApi.events.list()
-            ]);
-            setRoutes(routesData);
-            setEvents(eventsData);
-            setError(null);
-        } catch (err) {
-            setError('Error al cargar datos');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Filter logic
+    const filteredRoutes = routes.filter(route =>
+        route.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        route.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     const handleDelete = async (id: string, name: string) => {
         if (!confirm(`¿Eliminar ruta "${name}"?`)) return;
         setDeletingId(id);
         try {
             await adminApi.routes.delete(id);
-            setRoutes(routes.filter(r => r._id !== id));
+            // Offline Optimista
+            await dbService.deleteRoute(id);
+            toast.success('Ruta eliminada');
+            await refetch(); // Actualizar datos
         } catch (err) {
-            alert('Error al eliminar');
+            toast.error('Error al eliminar');
         } finally {
             setDeletingId(null);
         }
@@ -119,19 +114,25 @@ export default function AdminRutasPage() {
                     dataToSend.image_id = uploadRes.id;
                 } catch (uploadErr) {
                     console.error('Error subiendo imagen:', uploadErr);
-                    alert('Error al subir la imagen, pero se intentará guardar la ruta.');
+                    toast('Imagen no subida (Offline/Error), se guardará sin ella.', { icon: '⚠️' });
                 }
             }
 
             if (editingRoute) {
-                await adminApi.routes.update(editingRoute._id, dataToSend);
+                const updated = await adminApi.routes.update(editingRoute._id, dataToSend);
+                // Offline Optimista
+                await dbService.saveRoute(updated);
+                toast.success('Ruta actualizada');
             } else {
-                await adminApi.routes.create(dataToSend);
+                const created = await adminApi.routes.create(dataToSend);
+                // Offline Optimista
+                await dbService.saveRoute(created);
+                toast.success('Ruta creada');
             }
             setShowModal(false);
-            loadData();
+            await refetch(); // Actualizar datos
         } catch (err) {
-            alert('Error al guardar');
+            toast.error('Error al guardar');
             console.error(err);
         }
     };
@@ -214,9 +215,24 @@ export default function AdminRutasPage() {
                     </div>
                 </div>
 
-                {error && (
+                {/* Buscador */}
+                <div className="mb-6">
+                    <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl">🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Buscar rutas..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className={`${inputClass} pl-12`}
+                        />
+                    </div>
+                </div>
+
+                {isError && (
                     <div className="mb-6 p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-500">
-                        ❌ {error} <button onClick={loadData} className="ml-4 underline">Reintentar</button>
+                        ❌ Error al cargar rutas: {(error as any)?.message || 'Desconocido'}
+                        <button onClick={() => refetch()} className="ml-4 underline">Reintentar</button>
                     </div>
                 )}
 
@@ -231,7 +247,7 @@ export default function AdminRutasPage() {
                     </div>
                 ) : (
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {routes.map(route => {
+                        {filteredRoutes.map(route => {
                             const badge = getCategoryBadge(route.category);
                             return (
                                 <div key={route._id} className={`p-5 rounded-2xl ${isDark ? 'bg-surface-800/90 border border-surface-700' : 'bg-white/90 border border-surface-200 shadow-lg'}`}>
@@ -260,7 +276,16 @@ export default function AdminRutasPage() {
                                     </div>
 
                                     <div className="flex items-start justify-between mb-2">
-                                        <h3 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-surface-900'}`}>{route.name}</h3>
+                                        <div className="flex-1 mr-2">
+                                            <h3 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-surface-900'}`}>
+                                                {route.name}
+                                            </h3>
+                                            {route._id.startsWith('temp-') && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800 mt-1">
+                                                    📡 Pendiente de Sincronizar
+                                                </span>
+                                            )}
+                                        </div>
                                         <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-surface-700' : 'bg-surface-100'}`}>
                                             {getDifficultyBadge(route.difficulty)}
                                         </span>

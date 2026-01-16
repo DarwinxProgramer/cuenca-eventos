@@ -128,6 +128,14 @@ export interface UserUpdate {
     role?: 'user' | 'admin';
 }
 
+export interface UserCreate {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    city?: string;
+}
+
 // ============================================
 // SERVICIOS ADMIN
 // ============================================
@@ -171,7 +179,7 @@ export const adminApi = {
     // ============================================
     users: {
         list: () => api.get<User[]>('/users/'),
-        create: (data: { name: string; email: string; password: string; phone?: string; city?: string }) =>
+        create: (data: UserCreate) =>
             api.post<User>('/auth/register', data, false), // false = no auth required
         update: (id: string, data: UserUpdate) => api.put<User>(`/users/${id}`, data),
         delete: (id: string) => api.delete<void>(`/users/${id}`),

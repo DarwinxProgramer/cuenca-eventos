@@ -24,6 +24,10 @@ import AdminAlertasPage from './pages/admin/AdminAlertasPage'
 import AdminRutasPage from './pages/admin/AdminRutasPage'
 import AdminUsuariosPage from './pages/admin/AdminUsuariosPage'
 
+// Background Sync Component
+import { SyncStatusBadge } from './components/SyncStatusBadge'
+import { NetworkStatus } from './components/NetworkStatus'
+
 // Placeholder pages - for routes not yet implemented
 function PlaceholderPage({ title }: { title: string }) {
     return (
@@ -42,7 +46,11 @@ function PlaceholderPage({ title }: { title: string }) {
     )
 }
 
+import { useAlerts } from './hooks/useAlerts'
+
 function App() {
+    useAlerts(); // Listen for real-time alerts
+
     return (
         <ThemeProvider>
             <AuthProvider>
@@ -77,6 +85,12 @@ function App() {
                     <Route path="/intereses" element={<PlaceholderPage title="Personalizar Intereses" />} />
                     <Route path="/recuperar" element={<PlaceholderPage title="Recuperar Contraseña" />} />
                 </Routes>
+
+                {/* Network Status Banner (global) */}
+                <NetworkStatus />
+
+                {/* Background Sync Status Badge (global) */}
+                <SyncStatusBadge />
             </AuthProvider>
         </ThemeProvider>
     )

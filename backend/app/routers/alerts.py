@@ -1,14 +1,19 @@
 """
 Router de alertas - /alerts
-CRUD para gestión de alertas de tránsito
+CRUD para gestión de alertas de tránsito con soporte Real-time (SSE)
 """
+import json
+import asyncio
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from datetime import datetime
 from beanie import PydanticObjectId
 
 from app.core.dependencies import require_admin
-from app.core.cache import invalidate_alerts_cache
+# from app.core.cache import invalidate_alerts_cache # Not used explicitly here but kept for architecture
+from app.config import settings
 from app.models.user import User
 from app.models.alert import Alert, AlertType
 from app.models.event import GeoJSONPoint
@@ -16,10 +21,53 @@ from app.schemas.alert import AlertCreate, AlertUpdate, AlertResponse
 
 router = APIRouter(prefix="/alerts")
 
+ALERTS_CHANNEL = "alerts_channel"
+
+async def get_redis_client():
+    """Obtener cliente de Redis para Pub/Sub"""
+    return redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+
+async def publish_alert_event(event_type: str, data: dict):
+    """Publicar evento de alerta en Redis"""
+    try:
+        r = await get_redis_client()
+        message = {
+            "type": event_type,  # create, update, delete
+            "data": data
+        }
+        await r.publish(ALERTS_CHANNEL, json.dumps(message))
+        await r.close()
+    except Exception as e:
+        print(f"Error publishing to Redis: {e}")
 
 # ============================================
 # ENDPOINTS PÚBLICOS
 # ============================================
+
+@router.get("/stream")
+async def stream_alerts():
+    """
+    Endpoint SSE (Server-Sent Events) para recibir alertas en tiempo real.
+    El cliente debe conectarse usando EventSource.
+    """
+    async def event_generator():
+        r = await get_redis_client()
+        pubsub = r.pubsub()
+        await pubsub.subscribe(ALERTS_CHANNEL)
+        try:
+            # Enviar mensaje de conexión establecida
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    yield f"data: {message['data']}\n\n"
+        except asyncio.CancelledError:
+            print("Client disconnected from SSE")
+        finally:
+            await pubsub.unsubscribe(ALERTS_CHANNEL)
+            await r.close()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/", response_model=List[AlertResponse])
 async def get_alerts(
@@ -122,7 +170,7 @@ async def create_alert(
     
     await alert.insert()
     
-    return AlertResponse(
+    response_data = AlertResponse(
         _id=str(alert.id),
         title=alert.title,
         description=alert.description,
@@ -135,6 +183,11 @@ async def create_alert(
         is_active=alert.is_active,
         created_at=alert.created_at
     )
+
+    # Publish Real-time Event
+    await publish_alert_event("create", json.loads(response_data.model_dump_json()))
+
+    return response_data
 
 
 @router.put("/{alert_id}", response_model=AlertResponse)
@@ -168,7 +221,7 @@ async def update_alert(
     await alert.update({"$set": update_data})
     alert = await Alert.get(alert_id)
     
-    return AlertResponse(
+    response_data = AlertResponse(
         _id=str(alert.id),
         title=alert.title,
         description=alert.description,
@@ -181,6 +234,11 @@ async def update_alert(
         is_active=alert.is_active,
         created_at=alert.created_at
     )
+    
+    # Publish Real-time Event
+    await publish_alert_event("update", json.loads(response_data.model_dump_json()))
+
+    return response_data
 
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -200,4 +258,8 @@ async def delete_alert(
         raise HTTPException(status_code=404, detail="Alerta no encontrada")
     
     await alert.delete()
+
+    # Publish Real-time Event
+    await publish_alert_event("delete", {"_id": alert_id})
+
     return None
