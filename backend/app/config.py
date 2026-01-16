@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://localhost:27017"
     MONGODB_DB_NAME: str = "cuenca_eventos"
     
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379"
-    
     # JWT
     SECRET_KEY: str = "tu-clave-secreta-cambiar-en-produccion"
     ALGORITHM: str = "HS256"

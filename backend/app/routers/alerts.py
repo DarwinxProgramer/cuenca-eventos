@@ -3,8 +3,6 @@ Router de alertas - /alerts
 CRUD para gestión de alertas de tránsito con soporte Real-time (SSE)
 """
 import json
-import asyncio
-import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
@@ -12,8 +10,7 @@ from datetime import datetime
 from beanie import PydanticObjectId
 
 from app.core.dependencies import require_admin
-# from app.core.cache import invalidate_alerts_cache # Not used explicitly here but kept for architecture
-from app.config import settings
+from app.core.broadcast import alerts_broadcaster
 from app.models.user import User
 from app.models.alert import Alert, AlertType
 from app.models.event import GeoJSONPoint
@@ -21,24 +18,12 @@ from app.schemas.alert import AlertCreate, AlertUpdate, AlertResponse
 
 router = APIRouter(prefix="/alerts")
 
-ALERTS_CHANNEL = "alerts_channel"
-
-async def get_redis_client():
-    """Obtener cliente de Redis para Pub/Sub"""
-    return redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-
 async def publish_alert_event(event_type: str, data: dict):
-    """Publicar evento de alerta en Redis"""
+    """Publicar evento de alerta a todos los clientes conectados"""
     try:
-        r = await get_redis_client()
-        message = {
-            "type": event_type,  # create, update, delete
-            "data": data
-        }
-        await r.publish(ALERTS_CHANNEL, json.dumps(message))
-        await r.close()
+        await alerts_broadcaster.broadcast(event_type, data)
     except Exception as e:
-        print(f"Error publishing to Redis: {e}")
+        print(f"Error broadcasting event: {e}")
 
 # ============================================
 # ENDPOINTS PÚBLICOS
@@ -50,34 +35,14 @@ async def stream_alerts():
     Endpoint SSE (Server-Sent Events) para recibir alertas en tiempo real.
     El cliente debe conectarse usando EventSource.
     """
-    async def event_generator():
-        try:
-            r = await get_redis_client()
-            pubsub = r.pubsub()
-            await pubsub.subscribe(ALERTS_CHANNEL)
-            
-            # Enviar mensaje de conexión establecida
-            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
-            
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    yield f"data: {message['data']}\n\n"
-        except asyncio.CancelledError:
-            print("Client disconnected from SSE")
-        except Exception as e:
-            # Si Redis no está disponible, enviar mensaje de error y cerrar
-            print(f"Redis no disponible para streaming: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Streaming no disponible'})}\n\n"
-        finally:
-            try:
-                if 'pubsub' in locals():
-                    await pubsub.unsubscribe(ALERTS_CHANNEL)
-                if 'r' in locals():
-                    await r.close()
-            except:
-                pass
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        alerts_broadcaster.subscribe(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 @router.get("/", response_model=List[AlertResponse])
 async def get_alerts(

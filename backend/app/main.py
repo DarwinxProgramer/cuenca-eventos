@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.database import connect_to_mongodb, close_mongodb_connection
-from app.core.cache import connect_to_redis, close_redis_connection
 
 
 @asynccontextmanager
@@ -20,22 +19,11 @@ async def lifespan(app: FastAPI):
     
     await connect_to_mongodb()
     
-    # Redis is optional - app will work without it (just slower)
-    try:
-        await connect_to_redis()
-        print("✅ Redis conectado (caché habilitado)")
-    except Exception as e:
-        print(f"⚠️  Redis no disponible (caché deshabilitado): {e}")
-    
     print(f"🚀 {settings.PROJECT_NAME} v{settings.VERSION} iniciado")
     
     yield
     
     # Shutdown
-    try:
-        await close_redis_connection()
-    except:
-        pass
     await close_mongodb_connection()
     print("👋 Servidor detenido")
 
