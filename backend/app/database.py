@@ -16,6 +16,11 @@ async def connect_to_mongodb():
     """Conectar a MongoDB al iniciar la aplicación"""
     global db_client
     
+    # Debug: Mostrar qué URL se está usando
+    import os
+    env_url = os.getenv("MONGODB_URL")
+    print(f"🔍 DEBUG - MONGODB_URL desde env: {env_url[:50] if env_url else 'NO ENCONTRADA'}...")
+    print(f"🔍 DEBUG - settings.MONGODB_URL: {settings.MONGODB_URL[:50]}...")
     print(f"🔗 Conectando a MongoDB: {settings.MONGODB_URL}")
     
     db_client = AsyncIOMotorClient(settings.MONGODB_URL)

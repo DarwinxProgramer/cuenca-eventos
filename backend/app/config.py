@@ -42,8 +42,12 @@ class Settings(BaseSettings):
     ]
     
     class Config:
+        # No requiere archivo .env - lee directamente de variables de entorno
+        case_sensitive = False  # Permite MONGODB_URL o mongodb_url
         env_file = ".env"
-        case_sensitive = True
+        env_file_encoding = "utf-8"
+        # Las variables de entorno tienen prioridad sobre .env
+        extra = "allow"
 
 
 @lru_cache()

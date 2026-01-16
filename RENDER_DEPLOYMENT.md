@@ -16,6 +16,8 @@ Esta guía te ayudará a desplegar el backend en Render.com.
 
 ### 2. Variables de Entorno Requeridas
 
+**IMPORTANTE**: Los nombres deben ser EXACTOS (copia y pega):
+
 Ve a **Environment** en tu servicio y agrega:
 
 ```bash
