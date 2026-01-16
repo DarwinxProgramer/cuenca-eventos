@@ -21,20 +21,22 @@ async def connect_to_redis():
     """Conectar a Redis al iniciar la aplicación"""
     global redis_client
     
-    print(f"🔗 Conectando a Redis: {settings.REDIS_URL}")
+    print(f"🔗 Intentando conectar a Redis...")
     
-    redis_client = redis.from_url(
-        settings.REDIS_URL,
-        encoding="utf-8",
-        decode_responses=True
-    )
-    
-    # Verificar conexión
     try:
+        redis_client = redis.from_url(
+            settings.REDIS_URL,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=2  # Timeout corto para fallar rápido
+        )
+        
+        # Verificar conexión con timeout
         await redis_client.ping()
-        print("✅ Conectado a Redis")
+        print(f"✅ Conectado a Redis: {settings.REDIS_URL}")
     except Exception as e:
-        print(f"⚠️ No se pudo conectar a Redis: {e}")
+        print(f"⚠️  Redis no disponible: {str(e)[:100]}")
+        print("ℹ️  La aplicación funcionará sin caché")
         redis_client = None
 
 
