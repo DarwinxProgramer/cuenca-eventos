@@ -51,10 +51,11 @@ async def stream_alerts():
     El cliente debe conectarse usando EventSource.
     """
     async def event_generator():
-        r = await get_redis_client()
-        pubsub = r.pubsub()
-        await pubsub.subscribe(ALERTS_CHANNEL)
         try:
+            r = await get_redis_client()
+            pubsub = r.pubsub()
+            await pubsub.subscribe(ALERTS_CHANNEL)
+            
             # Enviar mensaje de conexión establecida
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
             
@@ -63,9 +64,18 @@ async def stream_alerts():
                     yield f"data: {message['data']}\n\n"
         except asyncio.CancelledError:
             print("Client disconnected from SSE")
+        except Exception as e:
+            # Si Redis no está disponible, enviar mensaje de error y cerrar
+            print(f"Redis no disponible para streaming: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Streaming no disponible'})}\n\n"
         finally:
-            await pubsub.unsubscribe(ALERTS_CHANNEL)
-            await r.close()
+            try:
+                if 'pubsub' in locals():
+                    await pubsub.unsubscribe(ALERTS_CHANNEL)
+                if 'r' in locals():
+                    await r.close()
+            except:
+                pass
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
