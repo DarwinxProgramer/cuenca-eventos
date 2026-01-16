@@ -19,13 +19,23 @@ async def lifespan(app: FastAPI):
     configure_logger()
     
     await connect_to_mongodb()
-    await connect_to_redis()
+    
+    # Redis is optional - app will work without it (just slower)
+    try:
+        await connect_to_redis()
+        print("✅ Redis conectado (caché habilitado)")
+    except Exception as e:
+        print(f"⚠️  Redis no disponible (caché deshabilitado): {e}")
+    
     print(f"🚀 {settings.PROJECT_NAME} v{settings.VERSION} iniciado")
     
     yield
     
     # Shutdown
-    await close_redis_connection()
+    try:
+        await close_redis_connection()
+    except:
+        pass
     await close_mongodb_connection()
     print("👋 Servidor detenido")
 

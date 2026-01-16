@@ -19,11 +19,19 @@ def get_rate_limit_key(request: Request) -> str:
 
 # Inicializar Limiter
 # storage_uri se conecta al Redis que ya tenemos configurado
-limiter = Limiter(
-    key_func=get_rate_limit_key,
-    storage_uri=settings.REDIS_URL,
-    strategy="fixed-window" # o "moving-window"
-)
+# Si Redis no está disponible, usa memoria (no persiste entre reinicios)
+try:
+    limiter = Limiter(
+        key_func=get_rate_limit_key,
+        storage_uri=settings.REDIS_URL,
+        strategy="fixed-window" # o "moving-window"
+    )
+except Exception:
+    # Fallback a memoria si Redis no está disponible
+    limiter = Limiter(
+        key_func=get_rate_limit_key,
+        strategy="fixed-window"
+    )
 
 # Configuración por defecto si no se especifica en el endpoint
 # limiter.default_limits = ["100/minute"]
